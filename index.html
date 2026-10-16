@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cafeterías de Murcia</title>
+<meta name="description" content="Nueve cafeterías de Murcia con mapa, opinión de cada una y tu lista de sitios por probar.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23F4D13D' stroke='%2316241D' stroke-width='2.5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --papel: #F7F8F2;
+    --tinta: #16241D;
+    --hoja: #1F5136;
+    --limon: #F4D13D;
+    --linea: #D3D9C8;
+    --muted: #55635A;
+    --realce: rgba(244, 209, 61, 0.28);
+    --tomate: #B8402A;
+    --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+    --texto: "Source Serif 4", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --papel: #121A16;
+      --tinta: #EEF2E8;
+      --hoja: #8FD0A5;
+      --linea: #2B3A31;
+      --muted: #A6B5AA;
+      --realce: rgba(244, 209, 61, 0.16);
+      --tomate: #F0866F;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--texto);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  :focus-visible { outline: 3px solid var(--hoja); outline-offset: 2px; }
+
+  /* Estructura: título y filtros | mapa | lista */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "cabecera mapa" "lista mapa";
+    min-height: 100vh;
+  }
+  .cabecera { grid-area: cabecera; padding: clamp(20px, 4vw, 48px) clamp(20px, 4vw, 48px) 8px; }
+  .lista-area { grid-area: lista; padding: 0 clamp(20px, 4vw, 48px) clamp(24px, 4vw, 48px); }
+  .mapa-area { grid-area: mapa; border-left: 1px solid var(--linea); }
+  .mapa-fijo { position: sticky; top: 0; height: 100vh; height: 100dvh; }
+  #mapa { width: 100%; height: 100%; background: var(--linea); }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.4rem, 5.5vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.025em;
+    margin: 0 0 16px;
+  }
+  .intro { max-width: 34em; margin: 0 0 24px; color: var(--muted); }
+
+  /* Controles */
+  .buscar label {
+    display: block;
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+  }
+  .buscar input {
+    width: 100%;
+    font: inherit;
+    padding: 10px 12px;
+    color: var(--tinta);
+    background: transparent;
+    border: 2px solid var(--tinta);
+    border-radius: 4px;
+  }
+  .buscar input::placeholder { color: var(--muted); opacity: 1; }
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .chip {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 0.92rem;
+    padding: 6px 12px;
+    color: var(--tinta);
+    background: transparent;
+    border: 1.5px solid var(--tinta);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--tinta); color: var(--papel); }
+  .chip.lista[aria-pressed="true"] { background: var(--tomate); border-color: var(--tomate); color: #fff; }
+  .estado { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 0; min-height: 2rem; }
+  .cuenta { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  .limpiar {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 0.92rem;
+    color: var(--hoja);
+    background: none;
+    border: 0;
+    padding: 4px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+
+  /* La carta */
+  .carta { list-style: none; margin: 8px 0 0; padding: 0; border-bottom: 1px solid var(--linea); }
+  .fila {
+    display: grid;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px 10px;
+    margin: 0 -10px;
+    border-top: 1px solid var(--linea);
+    transition: background-color 120ms;
+  }
+  .fila.activa { background: var(--realce); }
+  .num {
+    display: inline-grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1rem;
+    color: #16241D;
+    background: var(--limon);
+    border: 2px solid #16241D;
+    border-radius: 50%;
+  }
+  .arriba { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .arriba h3 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.35rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  .guia { flex: 1 1 24px; min-width: 24px; border-bottom: 2px dotted var(--linea); transform: translateY(-5px); }
+  .tag {
+    font-family: var(--display);
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 1px 8px;
+    color: var(--muted);
+    border: 1px solid var(--linea);
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .tag.pendiente { border-style: dashed; font-style: italic; }
+  .desc { margin: 6px 0 0; max-width: 36em; }
+  .acciones { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; }
+  .enlace {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--hoja);
+    background: none;
+    border: 0;
+    padding: 2px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .enlace[aria-pressed="true"] { color: var(--tomate); text-decoration-style: wavy; }
+  .vacio { padding: 28px 0; color: var(--muted); }
+  .vacio p { margin: 0 0 8px; }
+
+  .pie { margin: 28px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+  /* Pines del mapa */
+  .pin-caja { background: none; border: 0; }
+  .pin {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #16241D;
+    background: #F4D13D;
+    border: 2.5px solid #16241D;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+  .pin.guardado { box-shadow: 0 0 0 3px #B8402A, 0 1px 3px rgba(0, 0, 0, 0.35); }
+  .pin.sel { background: #1F5136; color: #fff; transform: scale(1.18); }
+  .leaflet-tile-pane { filter: grayscale(0.85) contrast(0.95); }
+  @media (prefers-color-scheme: dark) { .leaflet-tile-pane { filter: grayscale(0.85) brightness(0.8); } }
+
+  @media (max-width: 900px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto;
+      grid-template-areas: "cabecera" "mapa" "lista";
+    }
+    .mapa-area { border-left: 0; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
+    .mapa-fijo { position: relative; height: 400px; }
+    .cabecera { padding-bottom: 20px; }
+    .lista-area { padding-top: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fila { transition: none; }
+    .pin.sel { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header class="cabecera">
+    <h1>Cafeterías de Murcia</h1>
+    <p class="intro">Nueve cafeterías de Murcia con lo que pienso de cada una. Las que todavía no he probado lo dicen. Busca, filtra y guarda las que quieras probar tú.</p>
+    <div class="buscar">
+      <label for="q">Buscar</label>
+      <input id="q" type="search" placeholder="Un nombre o un tipo, por ejemplo «postres»" autocomplete="off">
+    </div>
+    <ul class="etiquetas" id="etiquetas" aria-label="Filtrar por tipo"></ul>
+    <div class="estado">
+      <p class="cuenta" id="cuenta" aria-live="polite"></p>
+      <button type="button" class="limpiar" id="limpiar" hidden>Quitar filtros</button>
+    </div>
+  </header>
+
+  <div class="mapa-area">
+    <div class="mapa-fijo"><div id="mapa" role="region" aria-label="Mapa con las cafeterías"></div></div>
+  </div>
+
+  <main class="lista-area">
+    <ol class="carta" id="carta"></ol>
+    <noscript><p class="vacio">Esta página necesita JavaScript para mostrar la lista.</p></noscript>
+    <p class="pie">Lista de Ángela Vega. Mapa de OpenStreetMap.</p>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ------------------------------------------------------------------
+   Para añadir un sitio, copia un bloque de esta lista y cambia los datos.
+   - id: una palabra sin espacios y distinta de las demás
+   - fui: true si has ido, false si todavía no (sale «Aún no he ido»); quítalo si no quieres indicarlo
+   - tags: etiquetas para filtrar (si repites una, aparece un solo botón)
+   - lat / lng: coordenadas (en Google Maps: clic derecho sobre el sitio)
+   - q: texto con el que se busca el sitio en Google Maps
+------------------------------------------------------------------- */
+const CAFES = [
+  { id: "paradise", nombre: "Paradise Gastro Bar", fui: false,
+    desc: "",
+    tags: [], lat: 37.9902662, lng: -1.1320545, q: "Paradise gastro-bar Murcia" },
+  { id: "socola", nombre: "Socolá", fui: true,
+    desc: "Un rinconcito con desayunos especiales, de esos tipo brunch.",
+    tags: ["Brunch"], lat: 37.9858853, lng: -1.1249213, q: "Socolá Murcia" },
+  { id: "glea", nombre: "Glea", fui: true,
+    desc: "Una pastelería de diseño aquí en Murcia.",
+    tags: ["Postres"], lat: 37.9849781, lng: -1.1281271, q: "Glea Murcia" },
+  { id: "milano", nombre: "Café Milano", fui: true,
+    desc: "Cafetería italiana con muy buenos precios y muchísima variedad. Muy de barrio y muy acogedora.",
+    tags: ["Buenos precios"], lat: 37.9962747, lng: -1.1329409, q: "Café Milano Murcia" },
+  { id: "verdementa", nombre: "Verdementa", fui: false,
+    desc: "",
+    tags: [], lat: 37.9915115, lng: -1.1333255, q: "VerdeMenta Murcia" },
+  { id: "alba", nombre: "Café Alba",
+    desc: "",
+    tags: [], lat: 37.9886265, lng: -1.1384217, q: "Cafe de Alba Murcia" },
+  { id: "vertigo", nombre: "Vértigo y Calambre", fui: true,
+    desc: "Café de especialidad. No tienen mucha comida, pero en bebidas sí: té y muchísimas cosas más.",
+    tags: ["Café de especialidad", "Té"], lat: 37.9876615, lng: -1.1280881, q: "Vértigo y Calambre Murcia" },
+  { id: "drexco", nombre: "Drexco", fui: true,
+    desc: "El café más rico que he probado. Sus tostadas tienen muy buena pinta. Eso sí, es caro.",
+    tags: [], lat: 37.9858583, lng: -1.1291938, q: "Drexco Trapería Murcia" },
+  { id: "mariantonietta", nombre: "Mariantonietta Café",
+    desc: "Nunca he ido a desayunar, pero tienen cócteles y un día a la semana hacen un bingo con una drag queen.",
+    tags: ["Cócteles"], lat: 37.984635, lng: -1.124294, q: "Mariantonietta Cafe Murcia" }
+];
+
+/* ---------- Estado ---------- */
+const CLAVE = "cafeterias-murcia:mi-lista";
+const reducirMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const quiero = cargarLista();
+let consulta = "";
+const etiquetasActivas = new Set();
+let soloLista = false;
+let activaId = null;
+
+function cargarLista() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLAVE) || "[]");
+    return new Set(Array.isArray(v) ? v : []);
+  } catch (e) { return new Set(); }
+}
+function guardarLista() {
+  try { localStorage.setItem(CLAVE, JSON.stringify([...quiero])); } catch (e) { /* sin almacenamiento */ }
+}
+
+/* ---------- Utilidades ---------- */
+const sinAcentos = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+function h(tag, props, ...hijos) {
+  const el = document.createElement(tag);
+  if (props) {
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+  }
+  for (const hijo of hijos.flat()) {
+    if (hijo == null || hijo === false) continue;
+    el.append(hijo.nodeType ? hijo : document.createTextNode(String(hijo)));
+  }
+  return el;
+}
+const urlGoogleMaps = (c) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(c.q);
+const numero = (c) => CAFES.indexOf(c) + 1;
+
+/* ---------- Mapa ---------- */
+let mapa = null;
+const marcadores = new Map();
+let capa = null;
+
+function iniciarMapa() {
+  if (!window.L) return;
+  mapa = L.map("mapa", { zoomControl: true }).setView([37.9878, -1.13], 15);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(mapa);
+  capa = L.layerGroup().addTo(mapa);
+  for (const c of CAFES) {
+    const icono = L.divIcon({
+      className: "pin-caja",
+      html: '<span class="pin">' + numero(c) + "</span>",
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+    const m = L.marker([c.lat, c.lng], { icon: icono, title: c.nombre, keyboard: true, alt: c.nombre });
+    m.bindTooltip(c.nombre, { direction: "top", offset: [0, -16] });
+    m.on("click", () => seleccionar(c.id, true));
+    marcadores.set(c.id, m);
+  }
+}
+
+function actualizarPines() {
+  for (const [id, m] of marcadores) {
+    const el = m.getElement && m.getElement();
+    const pin = el && el.querySelector(".pin");
+    if (!pin) continue;
+    pin.classList.toggle("guardado", quiero.has(id));
+    pin.classList.toggle("sel", id === activaId);
+  }
+}
+
+function ajustarMapa(visibles) {
+  if (!mapa || visibles.length === 0) return;
+  if (visibles.length === 1) {
+    mapa.setView([visibles[0].lat, visibles[0].lng], 16, { animate: !reducirMovimiento });
+    return;
+  }
+  const limites = L.latLngBounds(visibles.map((c) => [c.lat, c.lng]));
+  mapa.fitBounds(limites, { padding: [48, 48], maxZoom: 16, animate: !reducirMovimiento });
+}
+
+/* ---------- Lista ---------- */
+const listaEl = document.getElementById("carta");
+const cuentaEl = document.getElementById("cuenta");
+const limpiarEl = document.getElementById("limpiar");
+const etiquetasEl = document.getElementById("etiquetas");
+const buscarEl = document.getElementById("q");
+
+function coincide(c) {
+  if (soloLista && !quiero.has(c.id)) return false;
+  if (etiquetasActivas.size && !c.tags.some((t) => etiquetasActivas.has(t))) return false;
+  if (consulta) {
+    const texto = sinAcentos([c.nombre, c.desc, ...c.tags].join(" "));
+    if (!texto.includes(sinAcentos(consulta))) return false;
+  }
+  return true;
+}
+
+function filaDe(c) {
+  const guardado = quiero.has(c.id);
+  return h("li", { class: "fila" + (c.id === activaId ? " activa" : ""), id: "fila-" + c.id },
+    h("span", { class: "num", "aria-hidden": "true" }, numero(c)),
+    h("div", null,
+      h("div", { class: "arriba" },
+        h("h3", null, c.nombre),
+        (c.tags.length || c.fui === false) ? h("span", { class: "guia", "aria-hidden": "true" }) : null,
+        c.fui === false ? h("span", { class: "tag pendiente" }, "Aún no he ido") : null,
+        c.tags.map((t) => h("span", { class: "tag" }, t))
+      ),
+      c.desc ? h("p", { class: "desc" }, c.desc) : null,
+      h("div", { class: "acciones" },
+        mapa ? h("button", { type: "button", class: "enlace", onclick: () => enfocar(c.id) }, "Ver en el mapa") : null,
+        h("a", { class: "enlace", href: urlGoogleMaps(c), target: "_blank", rel: "noopener" }, "Abrir en Google Maps"),
+        h("button", { type: "button", class: "enlace", "aria-pressed": String(guardado), onclick: () => alternar(c.id) },
+          guardado ? "En mi lista" : "Quiero ir")
+      )
+    )
+  );
+}
+
+function hayFiltros() { return consulta !== "" || etiquetasActivas.size > 0 || soloLista; }
+
+function quitarFiltros() {
+  consulta = "";
+  buscarEl.value = "";
+  etiquetasActivas.clear();
+  soloLista = false;
+  pintar({ ajustar: true });
+}
+
+function mensajeVacio() {
+  if (soloLista && quiero.size === 0) {
+    return h("li", { class: "vacio" },
+      h("p", null, "Todavía no has guardado ningún sitio."),
+      h("p", null, "Pulsa «Quiero ir» en una cafetería y aparecerá aquí."));
+  }
+  return h("li", { class: "vacio" },
+    h("p", null, "Ningún sitio coincide con esa búsqueda."),
+    h("button", { type: "button", class: "enlace", onclick: quitarFiltros }, "Quitar filtros"));
+}
+
+function pintar(opciones) {
+  const ajustar = opciones && opciones.ajustar;
+  const visibles = CAFES.filter(coincide);
+  const ids = new Set(visibles.map((c) => c.id));
+  if (activaId && !ids.has(activaId)) activaId = null;
+
+  listaEl.replaceChildren(...(visibles.length ? visibles.map(filaDe) : [mensajeVacio()]));
+  cuentaEl.textContent = visibles.length === CAFES.length
+    ? CAFES.length + " sitios"
+    : visibles.length + " de " + CAFES.length + " sitios";
+  limpiarEl.hidden = !hayFiltros();
+
+  for (const chip of etiquetasEl.querySelectorAll("button[data-tag]")) {
+    chip.setAttribute("aria-pressed", String(etiquetasActivas.has(chip.dataset.tag)));
+  }
+  const chipLista = etiquetasEl.querySelector("button.lista");
+  chipLista.setAttribute("aria-pressed", String(soloLista));
+  chipLista.textContent = "Mi lista (" + quiero.size + ")";
+
+  if (mapa) {
+    for (const [id, m] of marcadores) {
+      if (ids.has(id)) { if (!capa.hasLayer(m)) capa.addLayer(m); }
+      else capa.removeLayer(m);
+    }
+    actualizarPines();
+    if (ajustar) ajustarMapa(visibles);
+  }
+}
+
+/* ---------- Acciones ---------- */
+function seleccionar(id, desplazar) {
+  activaId = id;
+  for (const fila of listaEl.querySelectorAll(".fila")) {
+    fila.classList.toggle("activa", fila.id === "fila-" + id);
+  }
+  actualizarPines();
+  if (desplazar) {
+    const fila = document.getElementById("fila-" + id);
+    if (fila) fila.scrollIntoView({ block: "nearest", behavior: reducirMovimiento ? "auto" : "smooth" });
+  }
+}
+
+function enfocar(id) {
+  const c = CAFES.find((x) => x.id === id);
+  seleccionar(id, false);
+  if (!mapa || !c) return;
+  mapa.setView([c.lat, c.lng], Math.max(mapa.getZoom(), 16), { animate: !reducirMovimiento });
+  if (window.matchMedia("(max-width: 900px)").matches) {
+    document.getElementById("mapa").scrollIntoView({ block: "center", behavior: reducirMovimiento ? "auto" : "smooth" });
+  }
+}
+
+function alternar(id) {
+  if (quiero.has(id)) quiero.delete(id); else quiero.add(id);
+  guardarLista();
+  pintar();
+  const boton = document.querySelector("#fila-" + id + " button[aria-pressed]");
+  if (boton) boton.focus();
+}
+
+/* ---------- Arranque ---------- */
+function crearFiltros() {
+  const unicas = [];
+  for (const c of CAFES) for (const t of c.tags) if (!unicas.includes(t)) unicas.push(t);
+  for (const t of unicas) {
+    etiquetasEl.append(h("li", null, h("button", {
+      type: "button", class: "chip", "data-tag": t, "aria-pressed": "false",
+      onclick: () => {
+        if (etiquetasActivas.has(t)) etiquetasActivas.delete(t); else etiquetasActivas.add(t);
+        pintar({ ajustar: true });
+      }
+    }, t)));
+  }
+  etiquetasEl.append(h("li", null, h("button", {
+    type: "button", class: "chip lista", "aria-pressed": "false",
+    onclick: () => { soloLista = !soloLista; pintar({ ajustar: true }); }
+  }, "Mi lista (0)")));
+}
+
+buscarEl.addEventListener("input", () => { consulta = buscarEl.value.trim(); pintar({ ajustar: true }); });
+limpiarEl.addEventListener("click", quitarFiltros);
+
+iniciarMapa();
+crearFiltros();
+pintar({ ajustar: true });
+</script>
+</body>
+</html>
